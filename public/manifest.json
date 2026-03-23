@@ -1,0 +1,16 @@
+{
+  "name": "K-SURVIVAL STATION",
+  "short_name": "K-SURVIVAL",
+  "description": "K-SURVIVAL STATION 관장님 전용 행사 관리 대시보드",
+  "start_url": "/director",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
