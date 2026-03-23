@@ -239,7 +239,15 @@ export default function MasterDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-gray-300 text-xs truncate max-w-[200px]">{displayAddress}</p>
-                        <p className="text-gray-500 text-[10px] mt-1 tracking-widest">{ev.contact || ""}</p>
+                        <p className="text-gray-500 text-[10px] mt-1 tracking-widest">
+                          {ev.contact ? (
+                            <a href={`tel:${ev.contact.replace(/-/g, '')}`} onClick={(e) => e.stopPropagation()} className="hover:text-cyan-400 hover:underline">
+                              {ev.contact}
+                            </a>
+                          ) : (
+                            "연락처 없음"
+                          )}
+                        </p>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <p className="font-bold text-white mb-1">{ev.total_count}명</p>
@@ -415,9 +423,29 @@ export default function MasterDashboard() {
                       placeholder="010-0000-0000"
                     />
                   ) : (
-                    <p className="text-sm font-medium text-teal-100 break-words leading-relaxed font-mono tracking-wider">
-                      {selectedEvent.contact || "연락처 미등록"}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium text-teal-100 break-words leading-relaxed font-mono tracking-wider">
+                        {selectedEvent.contact || "연락처 미등록"}
+                      </p>
+                      {selectedEvent.contact && (
+                        <div className="flex gap-2 pt-2 border-t border-gray-800/50">
+                          <a
+                            href={`tel:${selectedEvent.contact.replace(/-/g, '')}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 flex items-center justify-center gap-1 bg-cyan-900/40 border border-cyan-800/50 p-2 rounded-lg text-cyan-300 text-xs font-black hover:bg-cyan-800/60 transition-colors tracking-widest"
+                          >
+                            📞 통화
+                          </a>
+                          <a
+                            href={`sms:${selectedEvent.contact.replace(/-/g, '')}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 flex items-center justify-center gap-1 bg-blue-900/40 border border-blue-800/50 p-2 rounded-lg text-blue-300 text-xs font-black hover:bg-blue-800/60 transition-colors tracking-widest"
+                          >
+                            💬 문자
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
