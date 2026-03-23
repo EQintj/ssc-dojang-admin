@@ -6,6 +6,17 @@ import {
   ShieldAlert, Activity, Users, DollarSign, Target, ChevronDown, X, MapPin, Zap, Clock, CheckCircle2, Phone, Trash2, Edit3, Save, XCircle, Calendar, Star
 } from "lucide-react";
 
+type EventScale = "weekday" | "saturday" | "allDayA" | "allDayB";
+
+const PRICE_CONFIG: Record<EventScale, { basePrice: number; baseCount: number; addPrice: number; label: string }> = {
+  weekday: { basePrice: 350000, baseCount: 35, addPrice: 10000, label: "평일" },
+  saturday: { basePrice: 400000, baseCount: 40, addPrice: 10000, label: "토요일 파트" },
+  allDayA: { basePrice: 600000, baseCount: 60, addPrice: 10000, label: "토요일 종일 A" },
+  allDayB: { basePrice: 800000, baseCount: 80, addPrice: 10000, label: "토요일 종일 B" },
+};
+
+
+
 export default function MasterDashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [pin, setPin] = useState("");
@@ -17,6 +28,22 @@ export default function MasterDashboard() {
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any | null>(null);
+
+  const handleTravelFee = (amount: number) => {
+    if (!editData) return;
+    const currentFee = editData.facilities?.travelFee || 0;
+    const newFee = Math.max(0, currentFee + amount);
+    let calcCount = editData.total_count || 0;
+    const scale = (editData.event_scale as EventScale) || "weekday";
+    const cfg = PRICE_CONFIG[scale] || PRICE_CONFIG.weekday;
+    let baseAmount = cfg.basePrice;
+    if (calcCount > cfg.baseCount) { baseAmount += (calcCount - cfg.baseCount) * cfg.addPrice; }
+    setEditData({
+      ...editData,
+      facilities: { ...editData.facilities, travelFee: newFee },
+      total_price: baseAmount + newFee
+    });
+  };
 
   // ─── ADMIN LOGIN ───
   const handleLogin = (e: React.FormEvent) => {
@@ -529,7 +556,14 @@ export default function MasterDashboard() {
                               checked={part.active}
                               onChange={(e) => {
                                 const np = { ...editData.parts }; np[key].active = e.target.checked;
-                                setEditData({ ...editData, parts: np });
+                                let calcCount = 0;
+                                Object.values(np).forEach((p: any) => { if (p.active) calcCount += (Number(p.count)||0); });
+                                const scale = (editData.event_scale as EventScale) || "weekday";
+                                const cfg = PRICE_CONFIG[scale] || PRICE_CONFIG.weekday;
+                                let calcPrice = cfg.basePrice;
+                                if (calcCount > cfg.baseCount) { calcPrice += (calcCount - cfg.baseCount) * cfg.addPrice; }
+                                calcPrice += (editData.facilities?.travelFee || 0);
+                                setEditData({ ...editData, parts: np, total_count: calcCount, total_price: calcPrice });
                               }}
                               className="accent-pink-500"
                             />
@@ -565,7 +599,15 @@ export default function MasterDashboard() {
                               disabled={!part.active}
                               value={part.count}
                               onChange={(e) => {
-                                const np = { ...editData.parts }; np[key].count = Number(e.target.value) || 0; setEditData({ ...editData, parts: np });
+                                const np = { ...editData.parts }; np[key].count = Number(e.target.value) || 0; 
+                                let calcCount = 0;
+                                Object.values(np).forEach((p: any) => { if (p.active) calcCount += (Number(p.count)||0); });
+                                const scale = (editData.event_scale as EventScale) || "weekday";
+                                const cfg = PRICE_CONFIG[scale] || PRICE_CONFIG.weekday;
+                                let calcPrice = cfg.basePrice;
+                                if (calcCount > cfg.baseCount) { calcPrice += (calcCount - cfg.baseCount) * cfg.addPrice; }
+                                calcPrice += (editData.facilities?.travelFee || 0);
+                                setEditData({ ...editData, parts: np, total_count: calcCount, total_price: calcPrice });
                               }}
                               className="w-10 bg-transparent text-sm font-bold text-white text-right outline-none"
                             />
@@ -637,7 +679,9 @@ export default function MasterDashboard() {
               <div className="bg-gradient-to-r from-gray-900 to-black border border-green-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-xl">
                 <div>
                   <p className="text-[10px] text-green-500/70 font-bold uppercase tracking-widest mb-1">Total Estimation</p>
-                  <p className="text-gray-300 font-bold text-sm">예상 총 예산 및 누적 인원</p>
+                  <p className="text-gray-300 font-bold text-sm">
+                    {editData.status === "완료" ? "최종 확정 결산액" : editData.status === "확정" ? "통과(확정) 금액" : "예상 총 예산 및 누적 인원"}
+                  </p>
                 </div>
                 <div className="text-right flex items-center justify-end gap-4 w-full sm:w-auto">
                   <div className="flex flex-col items-end">
@@ -652,9 +696,22 @@ export default function MasterDashboard() {
                   <div className="flex flex-col items-end">
                     <span className="text-[10px] text-gray-500 mb-1 uppercase tracking-widest">KRW (예산)</span>
                     {isEditing ? (
-                      <div className="flex items-end gap-1"><input type="number" value={editData.total_price} onChange={e => setEditData({ ...editData, total_price: Number(e.target.value) || 0 })} className="w-28 bg-black border border-green-900/50 rounded p-1 text-right text-green-400 font-mono font-bold outline-none" />원</div>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-end gap-1"><input type="number" value={editData.total_price} onChange={e => setEditData({ ...editData, total_price: Number(e.target.value) || 0 })} className="w-28 bg-black border border-green-900/50 rounded p-1 text-right text-green-400 font-mono font-bold outline-none" />원</div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[10px] text-gray-400">출장비:</span>
+                          <button onClick={() => handleTravelFee(-50000)} className="bg-red-900/50 text-red-300 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-red-800">-5만</button>
+                          <span className="text-xs text-white font-mono px-1">{editData.facilities?.travelFee?.toLocaleString() || 0}</span>
+                          <button onClick={() => handleTravelFee(50000)} className="bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-blue-800">+5만</button>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-2xl font-black text-green-400 font-mono">{editData.total_price?.toLocaleString()}원</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-2xl font-black text-green-400 font-mono">{editData.total_price?.toLocaleString()}원</span>
+                        {(editData.facilities?.travelFee || 0) > 0 && (
+                          <span className="text-[10px] text-pink-400 font-bold mt-1 tracking-widest">출장비 {editData.facilities?.travelFee?.toLocaleString()}원 포함</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

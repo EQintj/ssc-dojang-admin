@@ -49,6 +49,7 @@ interface FormData {
     parkingLocation: string;
     projector: boolean;
     audio: boolean;
+    travelFee?: number;
   };
   snsAgreed: boolean;
   eventDate: string;
@@ -141,13 +142,15 @@ export default function DirectorDashboard() {
 
   // 금액 자동계산
   useEffect(() => {
+    if (formData.status === "확정" || formData.status === "완료") return;
     const cfg = PRICE_CONFIG[formData.eventScale];
     let price = cfg.basePrice;
     if (totalCount > cfg.baseCount) {
       price += (totalCount - cfg.baseCount) * cfg.addPrice;
     }
+    price += (formData.facilities?.travelFee || 0);
     setTotalPrice(price);
-  }, [formData.eventScale, totalCount]);
+  }, [formData.eventScale, totalCount, formData.status, formData.facilities?.travelFee]);
 
   // 토요일 파트 1부만 점유
   useEffect(() => {
@@ -224,6 +227,7 @@ export default function DirectorDashboard() {
             reviewText: data.facilities?.reviewText || "",
             rating: data.facilities?.rating || 5,
           });
+          setTotalPrice(data.total_price || 0);
           setIsExistingGym(true);
           setIsLoggedIn(true);
           saveRecentGym(loginForm.gymName);
@@ -885,8 +889,13 @@ export default function DirectorDashboard() {
               <div className="bg-[#0b0e14] p-5 rounded-xl border border-cyan-500/30 flex flex-col sm:flex-row justify-between sm:items-center gap-4 relative overflow-hidden">
                 <div className="absolute right-[-10%] bottom-[-50%] w-32 h-32 bg-cyan-500/10 blur-[30px] rounded-full"></div>
                 <div>
-                  <p className="text-sm md:text-lg font-black text-cyan-500 mb-1 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">예상 비용</p>
+                  <p className="text-sm md:text-lg font-black text-cyan-500 mb-1 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                    {formData.status === "완료" ? "최종 확정 결산액" : formData.status === "확정" ? "통과(확정) 금액" : "예상 비용"}
+                  </p>
                   <p className="text-[9px] text-gray-500 font-bold">* 기준인원 초과 시 1만원/인 추가 결산</p>
+                  {(formData.facilities?.travelFee || 0) > 0 && (
+                    <p className="text-[10px] text-pink-400 font-bold">* 출장비 {(formData.facilities.travelFee || 0).toLocaleString()}원 포함됨</p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end">
                   <p className="text-xs text-gray-500 font-black mb-1 tracking-wider uppercase">총 인원: <span className="text-white text-sm">{totalCount}명</span></p>
