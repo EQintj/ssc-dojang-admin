@@ -23,7 +23,7 @@ import {
   Copy,
   Phone
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+// import { supabase } from "@/lib/supabase";
 
 // ─── 타입 정의 ───────────────────────────────────────────────────────────────
 type EventScale = "weekday" | "saturday" | "allDayA" | "allDayB";
@@ -190,22 +190,14 @@ export default function DirectorDashboard() {
     }
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("gym_events")
-        .select("*")
-        .eq("gym_name", loginForm.gymName)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const res = await fetch("/api/events");
+      const events = await res.json();
+      const existingEvent = events.find((e: any) => e.gym_name === loginForm.gymName);
 
-      if (error && error.code !== "PGRST116") {
-        console.error("DB Check Error:", error);
-      }
-
-      if (data) {
-        if (data.password === loginForm.pin) {
+      if (existingEvent) {
+        if (existingEvent.password === loginForm.pin) {
           // 주소 분리 처리 (기존 데이터 호환)
-          let base = data.address || "";
+          let base = existingEvent.address || "";
           let detail = "";
           if (base.includes("|")) {
             const split = base.split("|");
@@ -214,20 +206,20 @@ export default function DirectorDashboard() {
           }
 
           setFormData({
-            gymName: data.gym_name,
-            contact: data.contact || "",
+            gymName: existingEvent.gym_name,
+            contact: existingEvent.contact || "",
             baseAddress: base,
             detailAddress: detail,
-            eventScale: data.event_scale || "weekday",
-            parts: data.parts || DEFAULT_PARTS,
-            facilities: data.facilities || formData.facilities,
-            snsAgreed: data.sns_agreed || false,
-            eventDate: data.facilities?.eventDate || "",
-            status: data.status || "예약대기",
-            reviewText: data.facilities?.reviewText || "",
-            rating: data.facilities?.rating || 5,
+            eventScale: existingEvent.event_scale || "weekday",
+            parts: existingEvent.parts || DEFAULT_PARTS,
+            facilities: existingEvent.facilities || formData.facilities,
+            snsAgreed: existingEvent.sns_agreed || false,
+            eventDate: existingEvent.facilities?.eventDate || "",
+            status: existingEvent.status || "예약대기",
+            reviewText: existingEvent.facilities?.reviewText || "",
+            rating: existingEvent.facilities?.rating || 5,
           });
-          setTotalPrice(data.total_price || 0);
+          setTotalPrice(existingEvent.total_price || 0);
           setIsExistingGym(true);
           setIsLoggedIn(true);
           saveRecentGym(loginForm.gymName);
@@ -252,11 +244,15 @@ export default function DirectorDashboard() {
   const handleSave = async () => {
     setIsLoading(true);
     try {
+      const res = await fetch("/api/events");
+      const events = await res.json();
+      const existing = events.find((e: any) => e.gym_name === formData.gymName);
+
       const payload = {
         gym_name: formData.gymName,
         password: loginForm.pin,
         contact: formData.contact,
-        address: `${formData.baseAddress}|${formData.detailAddress}`, // | 로 구분해서 합산 저장
+        address: `${formData.baseAddress}|${formData.detailAddress}`,
         event_scale: formData.eventScale,
         parts: formData.parts,
         facilities: {
@@ -268,33 +264,27 @@ export default function DirectorDashboard() {
         sns_agreed: formData.snsAgreed,
         total_price: totalPrice,
         total_count: totalCount,
-        ...(isExistingGym ? {} : { status: "예약대기" }),
+        status: existing?.status || "예약대기",
       };
 
-      let dbError = null;
+      const method = existing ? "PATCH" : "POST";
+      const saveRes = await fetch("/api/events", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(existing ? { id: existing.id, ...payload } : payload),
+      });
 
-      if (isExistingGym) {
-        const { error } = await supabase
-          .from("gym_events")
-          .update({ ...payload, created_at: new Date().toISOString() })
-          .eq("gym_name", formData.gymName);
-        dbError = error;
-      } else {
-        const { error } = await supabase.from("gym_events").insert([{ ...payload, created_at: new Date().toISOString() }]);
-        dbError = error;
-      }
-
-      if (dbError) {
-        console.error("Supabase Save Error:", dbError);
-        alert("\n데이터 저장 오류!\n관리자에게 문의하세요.\n");
-        return;
+      if (!saveRes.ok) {
+        const errData = await saveRes.json();
+        throw new Error(errData.error || "데이터 저장 실패");
       }
 
       setIsExistingGym(true);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Save Error:", err);
+      alert(`\n데이터 저장 오류!\n${err.message}\n관리자에게 문의하세요.\n`);
     } finally {
       setIsLoading(false);
     }
@@ -303,23 +293,32 @@ export default function DirectorDashboard() {
   const handleSaveReview = async () => {
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("gym_events")
-        .update({
+      const res = await fetch("/api/events");
+      const events = await res.json();
+      const existing = events.find((e: any) => e.gym_name === formData.gymName);
+
+      if (!existing) throw new Error("도장 정보를 찾을 수 없습니다.");
+
+      const saveRes = await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: existing.id,
           facilities: {
             ...formData.facilities,
             eventDate: formData.eventDate,
             reviewText: formData.reviewText,
             rating: formData.rating,
           }
-        })
-        .eq("gym_name", formData.gymName);
+        }),
+      });
+
+      if (!saveRes.ok) throw new Error("후기 저장 실패");
       
-      if (error) throw error;
       alert("✅ 후기가 성공적으로 등록되었습니다. 감사합니다!");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("후기 등록 중 오류가 발생했습니다.");
+      alert(`후기 등록 중 오류가 발생했습니다: ${err.message}`);
     } finally {
       setIsLoading(false);
     }

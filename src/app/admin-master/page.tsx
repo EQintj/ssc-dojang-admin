@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+// import { supabase } from "@/lib/supabase";
 import {
   ShieldAlert, Activity, Users, DollarSign, Target, ChevronDown, X, MapPin, Zap, Clock, CheckCircle2, Phone, Trash2, Edit3, Save, XCircle, Calendar, Star
 } from "lucide-react";
@@ -59,24 +59,37 @@ export default function MasterDashboard() {
   // ─── FETCH DATA ───
   const fetchEvents = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("gym_events")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) console.error("Error fetching admin data:", error);
-    else setEvents(data || []);
-    setIsLoading(false);
+    try {
+      const res = await fetch("/api/events");
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setEvents(data);
+      } else {
+        console.error("API error or invalid data format:", data);
+        setEvents([]);
+      }
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+      setEvents([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ─── UPDATE MANAGER / STATUS ───
   const updateRow = async (id: string, field: string, value: string) => {
     setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, [field]: value } : e)));
 
-    const { error } = await supabase.from("gym_events").update({ [field]: value }).eq("id", id);
+    try {
+      const res = await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, [field]: value }),
+      });
 
-    if (error) {
-      console.error(`Error updating ${field}:`, error);
+      if (!res.ok) throw new Error("업데이트 실패");
+    } catch (err) {
+      console.error(`Error updating ${field}:`, err);
       alert("데이터 업데이트에 실패했습니다.");
       fetchEvents();
     }
@@ -86,15 +99,23 @@ export default function MasterDashboard() {
   const deleteEvent = async (id: string, gymName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm(`⚠️ 경고: [${gymName}]의 모든 작전 데이터를 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
-      const { error } = await supabase.from("gym_events").delete().eq("id", id);
-      if (error) {
-        alert("삭제 실패");
-      } else {
+      try {
+        const res = await fetch("/api/events", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+
+        if (!res.ok) throw new Error("삭제 실패");
+        
         setEvents((prev) => prev.filter((ev) => ev.id !== id));
         if (selectedEvent?.id === id) {
           setSelectedEvent(null);
           setIsEditing(false);
         }
+      } catch (err) {
+        console.error("Delete error:", err);
+        alert("삭제 실패");
       }
     }
   };
@@ -108,24 +129,31 @@ export default function MasterDashboard() {
 
   const handleSaveEdit = async () => {
     if (!editData) return;
-    const { error } = await supabase.from("gym_events").update({
-      contact: editData.contact,
-      address: editData.address,
-      sns_agreed: editData.sns_agreed,
-      parts: editData.parts,
-      facilities: editData.facilities,
-      total_count: editData.total_count,
-      total_price: editData.total_price
-    }).eq("id", editData.id);
+    try {
+      const res = await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editData.id,
+          contact: editData.contact,
+          address: editData.address,
+          sns_agreed: editData.sns_agreed,
+          parts: editData.parts,
+          facilities: editData.facilities,
+          total_count: editData.total_count,
+          total_price: editData.total_price
+        }),
+      });
 
-    if (error) {
-      console.error("Update error:", error);
-      alert("데이터 수정 중 에러가 발생했습니다.");
-    } else {
+      if (!res.ok) throw new Error("수정 실패");
+
       setEvents((prev) => prev.map((ev) => (ev.id === editData.id ? editData : ev)));
       setSelectedEvent(editData);
       setIsEditing(false);
       alert("데이터가 성공적으로 수정되었습니다.");
+    } catch (err) {
+      console.error("Update error:", err);
+      alert("데이터 수정 중 에러가 발생했습니다.");
     }
   };
 
@@ -152,9 +180,10 @@ export default function MasterDashboard() {
     );
   }
 
-  const totalBookings = events.length;
-  const totalPeople = events.reduce((acc, ev) => acc + (ev.total_count || 0), 0);
-  const totalRevenue = events.reduce((acc, ev) => acc + (ev.total_price || 0), 0);
+  const safeEvents = Array.isArray(events) ? events : [];
+  const totalBookings = safeEvents.length;
+  const totalPeople = safeEvents.reduce((acc, ev) => acc + (ev.total_count || 0), 0);
+  const totalRevenue = safeEvents.reduce((acc, ev) => acc + (ev.total_price || 0), 0);
 
   const getScaleLabel = (scale: string) => {
     if (scale === 'weekday') return "평일 작전";
